@@ -17,11 +17,12 @@ The platform includes a Vue 3 frontend and a FastAPI backend running with Postgr
 - `client` -> Vue 3 frontend
 - `server` -> FastAPI backend
 - `docker-compose.yml`
+- `docker-compose.test.yml` -> Docker-based test runner
 - `run_test.sh`
 
 ## Environment Variables
 
-The backend requires PostgreSQL and the following environment variables:
+The backend uses PostgreSQL and requires the following environment variables:
 
 ```env
 DATABASE_URL=postgresql://user:password@db:5432/app_db
@@ -37,6 +38,14 @@ ENCRYPTION_KEY=your_fernet_key
 
 ## Run the System
 
+This is the primary supported way to run the full system locally:
+
+```bash
+docker compose up -d --build
+```
+
+To run in the foreground (see logs in your terminal):
+
 ```bash
 docker compose up --build
 ```
@@ -51,6 +60,7 @@ Access points:
 
 - Frontend: [http://localhost:5173](http://localhost:5173)
 - Backend API: [http://localhost:8000](http://localhost:8000)
+- Backend health: [http://localhost:8000/health](http://localhost:8000/health)
 
 ## Database
 
@@ -66,19 +76,29 @@ Access points:
 
 ## Run Tests
 
+Tests are executed in Docker for parity and determinism (PostgreSQL + backend + Playwright in containers).
+
+### Option 1: run via wrapper script (recommended)
+
 ```bash
 chmod +x run_test.sh
 ./run_test.sh
 ```
 
-This script runs:
+This runs:
 
-- Backend tests (`pytest`)
-- Frontend tests (Playwright)
+- Backend tests (`pytest`) in a container against an ephemeral PostgreSQL test DB
+- Frontend tests (Playwright) in a container against a live backend (`server-e2e`)
+
+### Option 2: run the Docker test compose directly
+
+```bash
+docker compose -f docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from client-test
+```
 
 ## Playwright Setup
 
-Use Node.js `>= 18.19`, then install browsers once:
+If running Playwright locally (outside Docker), use Node.js `>= 18.19`, then install browsers once:
 
 ```bash
 npx playwright install
