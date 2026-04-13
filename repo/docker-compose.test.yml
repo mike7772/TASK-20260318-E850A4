@@ -1,0 +1,79 @@
+services:
+  db-test:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: test_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "55432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  server-e2e:
+    build:
+      context: ./server
+    environment:
+      ENV: test
+      JWT_SECRET: test-secret
+      ENCRYPTION_KEY: test-key
+      ENABLE_PUBLIC_REGISTRATION: "true"
+      BOOTSTRAP_SYSTEM_ADMIN_USERNAME: sysadmin
+      BOOTSTRAP_SYSTEM_ADMIN_PASSWORD: password
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@db-test:5432/test_db
+    depends_on:
+      server-test:
+        condition: service_completed_successfully
+      db-test:
+        condition: service_healthy
+    ports:
+      - "18000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  server-test:
+    build:
+      context: ./server
+    environment:
+      ENV: test
+      JWT_SECRET: test-secret
+      ENCRYPTION_KEY: test-key
+      ENABLE_PUBLIC_REGISTRATION: "true"
+      BOOTSTRAP_SYSTEM_ADMIN_USERNAME: sysadmin
+      BOOTSTRAP_SYSTEM_ADMIN_PASSWORD: password
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@db-test:5432/test_db
+    depends_on:
+      db-test:
+        condition: service_healthy
+    command: >
+      sh -lc "pytest -q"
+
+  client-test:
+    build:
+      context: ./client
+    environment:
+      BOOTSTRAP_SYSTEM_ADMIN_USERNAME: sysadmin
+      BOOTSTRAP_SYSTEM_ADMIN_PASSWORD: password
+      CI: "true"
+      PLAYWRIGHT_BROWSERS_PATH: "0"
+      VITE_API_PROXY_TARGET: http://server-e2e:8000
+    depends_on:
+      server-e2e:
+        condition: service_healthy
+    command: >
+      sh -lc "
+        until curl -fsS http://server-e2e:8000/health >/dev/null; do sleep 1; done;
+        npm install;
+        npx playwright install --with-deps chromium;
+        npm run build;
+        npm run test:e2e
+      "
+

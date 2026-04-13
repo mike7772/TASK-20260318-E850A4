@@ -1,0 +1,58 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: audit_platform
+      POSTGRES_USER: audit_user
+      POSTGRES_PASSWORD: audit_pass
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U audit_user -d audit_platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build:
+      context: ./server
+    environment:
+      DATABASE_URL: postgresql+psycopg://audit_user:audit_pass@db:5432/audit_platform
+      JWT_SECRET: super-secret-change-me
+      ENCRYPTION_KEY: change-me-too
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - filestore:/app/uploads
+      - ./backups:/backups
+      - ./exports:/exports
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  client:
+    build:
+      context: ./client
+    depends_on:
+      - server
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  filestore:

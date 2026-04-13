@@ -1,0 +1,39 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: audit_platform
+      POSTGRES_USER: audit_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-audit_pass}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: always
+
+  server:
+    build:
+      context: ./server
+    environment:
+      DATABASE_URL: postgresql+psycopg://audit_user:${POSTGRES_PASSWORD:-audit_pass}@db:5432/audit_platform
+      JWT_SECRET: ${JWT_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+    depends_on:
+      db:
+        condition: service_started
+    volumes:
+      - filestore:/app/uploads
+      - ./backups:/backups
+      - ./exports:/exports
+    restart: always
+
+  client:
+    build:
+      context: ./client
+    depends_on:
+      - server
+    restart: always
+
+volumes:
+  pgdata:
+  filestore:
